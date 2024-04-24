@@ -24,6 +24,21 @@ func SendPostRequest(et interface{}, userSession security.UserSession, pangolinU
 	return getHTTPResponse(req, userSession, err, client)
 }
 
+func SendPatchRequest(et interface{}, userSession security.UserSession, pangolinUIUrl string, resource string) (*http.Response, []byte) {
+	marshal, err := json.Marshal(et)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest(http.MethodPatch, pangolinUIUrl+resource, strings.NewReader(string(marshal)))
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return getHTTPResponse(req, userSession, err, client)
+}
+
 func SendGetRequest(userSession security.UserSession, pangolinUIUrl string, resource string) (*http.Response, []byte) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", pangolinUIUrl+resource, nil)

@@ -14,6 +14,8 @@ import (
 	"pangolinModelManager/propListValue"
 	"pangolinModelManager/propType"
 	"pangolinModelManager/security"
+	"pangolinModelManager/stringUtils"
+	"slices"
 
 	"strings"
 )
@@ -61,7 +63,37 @@ func main() {
 	propTypes := propType.GetAllPropTypes(userSession, connectionToPangolinParams.NfviPangolin)
 	fmt.Println(propTypes)
 
-	//getAllSheets(spreadsheetID, ctx)
+	allSheets := getAllSheets(spreadsheetID, ctx)
+
+	for index, sheet := range allSheets {
+		if sheet.EntityTypeSheet.ParentId != "" {
+			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
+			if idx != -1 {
+				allSheets[index].EntityTypeSheet.ParentId = types[idx].Id
+			} else {
+				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
+			}
+		}
+	}
+
+	//check if id is not empty
+	for index, sheet := range allSheets {
+		if sheet.EntityTypeSheet.Id == "" {
+			typeSheet := sheet.EntityTypeSheet
+			EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params}
+			entityType.DoCreateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
+			allSheets[index].EntityTypeSheet.Id = sheet.EntityTypeSheet.Id
+		} else if stringUtils.ISUUID(sheet.EntityTypeSheet.Id) {
+			//update entity type
+			typeSheet := sheet.EntityTypeSheet
+			EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params, Id: typeSheet.Id}
+			updateEntityType := entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
+			fmt.Println(updateEntityType)
+		}
+
+	}
+
+	fmt.Println(allSheets)
 
 }
 
@@ -94,7 +126,7 @@ func getAllSheets(id string, ctx context.Context) []SheetData {
 		}
 
 		var SheetData SheetData
-		SheetData.EntityTypeSheet = EntityTypeSheet{valuesMap["ParentId"], valuesMap["Name"], valuesMap["Description"], valuesMap["Params"], valuesMap["Id"]}
+		SheetData.EntityTypeSheet = EntityTypeSheet{valuesMap["Parent"], valuesMap["Name"], valuesMap["Description"], valuesMap["Params"], valuesMap["Id"]}
 
 		var propSheets = []PropSheet{}
 		for key, value := range resp2.Values {

@@ -21,6 +21,35 @@ func DoCreateEntityType(session security.UserSession, pangolin string, e *Entity
 	}
 }
 
+func DoUpdateEntityType(session security.UserSession, pangolin string, e *EntityType) EntityType {
+	if e.Id == "" {
+		fmt.Println("EntityType Id is required for update")
+		panic("EntityType Id is required for update")
+	}
+
+	resource := "/api/v1/EntityType/" + e.Id
+
+	resp, resBody := restClient.SendPatchRequest(e, session, pangolin, resource)
+	if resp.StatusCode == 200 {
+		fmt.Println("Type created successfully :", string(resBody))
+		e.Id = string(resBody)
+
+		var EntityType EntityType
+		err := json.Unmarshal(resBody, &EntityType)
+		if err != nil {
+			fmt.Println("Error during Type update")
+			panic(string(resBody))
+		}
+		return EntityType
+
+	} else {
+		fmt.Println("Error during Type creation")
+		fmt.Println(string(resBody))
+		fmt.Errorf("Error during Type creation")
+		panic(string(resBody))
+	}
+}
+
 func GetAllEntityTypes(userSession security.UserSession, pangolinUIUrl string) []EntityType {
 	resource := "/api/v1/EntityType/list?pageNumber=0&pageSize=10000"
 	resp, resBody := restClient.SendGetRequest(userSession, pangolinUIUrl, resource)
