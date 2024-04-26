@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"pangolinModelManager/restClient"
 	"pangolinModelManager/security"
+	"strings"
 )
 
 func DoCreateEntityType(session security.UserSession, pangolin string, e *EntityType) {
@@ -12,12 +13,11 @@ func DoCreateEntityType(session security.UserSession, pangolin string, e *Entity
 	resp, resBody := restClient.SendPostRequest(e, session, pangolin, resource)
 	if resp.StatusCode == 201 {
 		fmt.Println("Type created successfully :", string(resBody))
-		e.Id = string(resBody)
+		s := string(resBody)
+		e.Id = strings.ReplaceAll(s, "\"", "")
 	} else {
 		fmt.Println("Error during Type creation")
 		fmt.Println(string(resBody))
-		fmt.Errorf("Error during Type creation")
-		panic(string(resBody))
 	}
 }
 
@@ -45,7 +45,6 @@ func DoUpdateEntityType(session security.UserSession, pangolin string, e *Entity
 	} else {
 		fmt.Println("Error during Type creation")
 		fmt.Println(string(resBody))
-		fmt.Errorf("Error during Type creation")
 		panic(string(resBody))
 	}
 }

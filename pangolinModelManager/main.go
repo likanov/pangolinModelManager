@@ -6,8 +6,8 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
-	"io/ioutil"
 	"log"
+	"os"
 	"pangolinModelManager/dimension"
 	"pangolinModelManager/entityType"
 	"pangolinModelManager/propGroup"
@@ -16,13 +16,13 @@ import (
 	"pangolinModelManager/security"
 	"pangolinModelManager/stringUtils"
 	"slices"
+	"strconv"
 
 	"strings"
 )
 
 const (
 	spreadsheetID = "1ANHnLYMldOaWvGcdUrLLEEngxAVPPLDzZ__q0n5HeF8"
-	readRange     = "Sheet1!A:C"
 	credentials   = "golang-api-419608-80318434846a.json"
 )
 
@@ -30,7 +30,7 @@ var sheetsService *sheets.Service
 
 func main() {
 	// Load the Google Sheets API credentials from your JSON file.
-	creds, err := ioutil.ReadFile(credentials)
+	creds, err := os.ReadFile(credentials)
 	if err != nil {
 		log.Fatalf("Unable to read credentials file: %v", err)
 	}
@@ -80,21 +80,57 @@ func main() {
 	for index, sheet := range allSheets {
 		if sheet.EntityTypeSheet.Id == "" {
 			typeSheet := sheet.EntityTypeSheet
-			EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params}
-			entityType.DoCreateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
-			allSheets[index].EntityTypeSheet.Id = sheet.EntityTypeSheet.Id
+
+			entityTypeInstance := getEntityTypeInstance(typeSheet)
+
+			entityType.DoCreateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &entityTypeInstance)
+			allSheets[index].EntityTypeSheet.Id = entityTypeInstance.Id
+			doUpdateCell(spreadsheetID, sheet.sheetTitle, 1, "B", entityTypeInstance.Id, ctx)
 		} else if stringUtils.ISUUID(sheet.EntityTypeSheet.Id) {
+			fmt.Println("Id is valid")
 			//update entity type
-			typeSheet := sheet.EntityTypeSheet
-			EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params, Id: typeSheet.Id}
-			updateEntityType := entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
-			fmt.Println(updateEntityType)
+			//typeSheet := sheet.EntityTypeSheet
+			//EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params, Id: typeSheet.Id}
+			//updateEntityType := entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
+			//fmt.Println(updateEntityType)
 		}
 
 	}
 
 	fmt.Println(allSheets)
 
+}
+
+func getEntityTypeInstance(typeSheet EntityTypeSheet) entityType.EntityType {
+
+	if typeSheet.Name == "" {
+		log.Fatalf("Name is required")
+	}
+
+	entityTypeInstance := entityType.EntityType{
+		Name: typeSheet.Name,
+	}
+	if typeSheet.Params != "" {
+		entityTypeInstance.Params = typeSheet.Params
+	}
+	if typeSheet.ParentId != "" {
+		entityTypeInstance.ParentId = typeSheet.ParentId
+	}
+	if typeSheet.Description != "" {
+		entityTypeInstance.Description = typeSheet.Description
+	}
+
+	return entityTypeInstance
+}
+
+func doUpdateCell(sheetId string, sheetTitle string, rowIndex int, columnName string, value string, ctx context.Context) {
+	valueRange := sheets.ValueRange{}
+	valueRange.Values = append(valueRange.Values, []interface{}{value})
+	itoa := strconv.Itoa(rowIndex)
+	_, err := sheetsService.Spreadsheets.Values.Update(sheetId, sheetTitle+"!"+columnName+itoa, &valueRange).ValueInputOption("USER_ENTERED").Context(ctx).Do()
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func getAllSheets(id string, ctx context.Context) []SheetData {
@@ -155,6 +191,7 @@ func getAllSheets(id string, ctx context.Context) []SheetData {
 			propSheets = append(propSheets, PropSheet)
 		}
 		SheetData.PropSheetItems = propSheets
+		SheetData.sheetTitle = sheet.Properties.Title
 
 		sheetData = append(sheetData, SheetData)
 
@@ -205,6 +242,7 @@ type PropSheet struct {
 }
 
 type SheetData struct {
+	sheetTitle      string
 	EntityTypeSheet EntityTypeSheet
 	PropSheetItems  []PropSheet
 }
