@@ -28,6 +28,11 @@ const (
 
 var sheetsService *sheets.Service
 
+var types []entityType.EntityType
+var dimensionList []dimension.Dimension
+var propGroupList []propGroup.PropGroup
+var propTypesList []propType.PropType
+
 func main() {
 	// Load the Google Sheets API credentials from your JSON file.
 	creds, err := os.ReadFile(credentials)
@@ -51,48 +56,48 @@ func main() {
 	connectionToPangolinParams := getConnectionToPangolinParams(spreadsheetID, ctx)
 	userSession := security.GetToken(connectionToPangolinParams)
 
-	dimensions := dimension.GetAllDimensions(userSession, connectionToPangolinParams.NfviPangolin)
-	fmt.Println(dimensions)
-
-	list := propGroup.GetAllPropGroupList(userSession, connectionToPangolinParams.NfviPangolin)
-	fmt.Println(list)
-
-	types := entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
-	fmt.Println(types)
-
-	propTypes := propType.GetAllPropTypes(userSession, connectionToPangolinParams.NfviPangolin)
-	fmt.Println(propTypes)
+	dimensionList = dimension.GetAllDimensions(userSession, connectionToPangolinParams.NfviPangolin)
+	propGroupList = propGroup.GetAllPropGroupList(userSession, connectionToPangolinParams.NfviPangolin)
+	types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
+	propTypesList = propType.GetAllPropTypes(userSession, connectionToPangolinParams.NfviPangolin)
 
 	allSheets := getAllSheets(spreadsheetID, ctx)
-
-	for index, sheet := range allSheets {
-		if sheet.EntityTypeSheet.ParentId != "" {
-			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
-			if idx != -1 {
-				allSheets[index].EntityTypeSheet.ParentId = types[idx].Id
-			} else {
-				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
-			}
-		}
-	}
 
 	//check if id is not empty
 	for index, sheet := range allSheets {
 		if sheet.EntityTypeSheet.Id == "" {
+
 			typeSheet := sheet.EntityTypeSheet
+			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
+			if idx != -1 {
+				typeSheet.ParentId = types[idx].Id
+			} else {
+				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
+			}
 
 			entityTypeInstance := getEntityTypeInstance(typeSheet)
-
 			entityType.DoCreateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &entityTypeInstance)
 			allSheets[index].EntityTypeSheet.Id = entityTypeInstance.Id
 			doUpdateCell(spreadsheetID, sheet.sheetTitle, 1, "B", entityTypeInstance.Id, ctx)
+			types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
+
 		} else if stringUtils.ISUUID(sheet.EntityTypeSheet.Id) {
 			fmt.Println("Id is valid")
-			//update entity type
-			//typeSheet := sheet.EntityTypeSheet
-			//EntityType := entityType.EntityType{ParentId: typeSheet.ParentId, Name: typeSheet.Name, Description: typeSheet.Description, Params: typeSheet.Params, Id: typeSheet.Id}
-			//updateEntityType := entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &EntityType)
-			//fmt.Println(updateEntityType)
+
+			typeSheet := sheet.EntityTypeSheet
+			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
+			if idx != -1 {
+				typeSheet.ParentId = types[idx].Id
+			} else {
+				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
+			}
+
+			entityTypeInstance := getEntityTypeInstance(typeSheet)
+			entityTypeInstance.Id = sheet.EntityTypeSheet.Id
+
+			entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &entityTypeInstance)
+			allSheets[index].EntityTypeSheet.Id = entityTypeInstance.Id
+			types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
 		}
 
 	}
