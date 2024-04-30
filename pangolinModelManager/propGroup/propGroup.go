@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"pangolinModelManager/restClient"
 	"pangolinModelManager/security"
+	"strings"
 )
 
 func DoCreatePropGroup(session security.UserSession, pangolin string, group *PropGroup) {
@@ -12,7 +13,8 @@ func DoCreatePropGroup(session security.UserSession, pangolin string, group *Pro
 	resp, resBody := restClient.SendPostRequest(group, session, pangolin, resource)
 	if resp.StatusCode == 201 {
 		fmt.Println("Group created successfully :", string(resBody))
-		group.Id = string(resBody)
+		s := string(resBody)
+		group.Id = strings.ReplaceAll(s, "\"", "")
 	} else {
 		fmt.Println("Error during Group creation")
 		fmt.Println(string(resBody))

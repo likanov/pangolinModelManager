@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -10,6 +11,8 @@ import (
 	"os"
 	"pangolinModelManager/dimension"
 	"pangolinModelManager/entityType"
+	"pangolinModelManager/entityTypeProp"
+	"pangolinModelManager/prop"
 	"pangolinModelManager/propGroup"
 	"pangolinModelManager/propListValue"
 	"pangolinModelManager/propType"
@@ -22,18 +25,48 @@ import (
 )
 
 const (
-	spreadsheetID = "1ANHnLYMldOaWvGcdUrLLEEngxAVPPLDzZ__q0n5HeF8"
-	credentials   = "golang-api-419608-80318434846a.json"
+	//spreadsheetID = "1ANHnLYMldOaWvGcdUrLLEEngxAVPPLDzZ__q0n5HeF8"
+	credentials = "golang-api-419608-80318434846a.json"
 )
 
+var spreadsheetID string
 var sheetsService *sheets.Service
 
-var types []entityType.EntityType
+var typeList []entityType.EntityType
 var dimensionList []dimension.Dimension
 var propGroupList []propGroup.PropGroup
 var propTypesList []propType.PropType
 
+var version string
+
 func main() {
+	args := os.Args
+
+	if len(args) < 2 {
+		log.Fatalf("Please provide the command to run, use 'help' to get the list of commands")
+	}
+	if args[1] == "import" {
+		if len(args) < 3 {
+			log.Fatalf("Please provide the url to the google sheet")
+		}
+		buffer := args[2][:strings.LastIndex(args[2], "/")]
+		spreadsheetID = buffer[strings.LastIndex(buffer, "/")+1:]
+		fmt.Println(spreadsheetID)
+		fmt.Println("Importing data from Google Sheets to Pangolin")
+		doImport()
+	} else if args[1] == "version" {
+		fmt.Println("Version:1.1.0")
+		fmt.Println("git info:", version)
+	} else if args[1] == "help" {
+		fmt.Println("import: Import the data from Google Sheets to Pangolin")
+		fmt.Println("version: Get the version of the tool")
+		fmt.Println("help: Get the help")
+	} else {
+		log.Fatalf("Command not found")
+	}
+
+}
+func doImport() {
 	// Load the Google Sheets API credentials from your JSON file.
 	creds, err := os.ReadFile(credentials)
 	if err != nil {
@@ -58,7 +91,7 @@ func main() {
 
 	dimensionList = dimension.GetAllDimensions(userSession, connectionToPangolinParams.NfviPangolin)
 	propGroupList = propGroup.GetAllPropGroupList(userSession, connectionToPangolinParams.NfviPangolin)
-	types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
+	typeList = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
 	propTypesList = propType.GetAllPropTypes(userSession, connectionToPangolinParams.NfviPangolin)
 
 	allSheets := getAllSheets(spreadsheetID, ctx)
@@ -68,9 +101,9 @@ func main() {
 		if sheet.EntityTypeSheet.Id == "" {
 
 			typeSheet := sheet.EntityTypeSheet
-			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
+			idx := slices.IndexFunc(typeList, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
 			if idx != -1 {
-				typeSheet.ParentId = types[idx].Id
+				typeSheet.ParentId = typeList[idx].Id
 			} else {
 				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
 			}
@@ -79,15 +112,15 @@ func main() {
 			entityType.DoCreateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &entityTypeInstance)
 			allSheets[index].EntityTypeSheet.Id = entityTypeInstance.Id
 			doUpdateCell(spreadsheetID, sheet.sheetTitle, 1, "B", entityTypeInstance.Id, ctx)
-			types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
+			typeList = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
 
 		} else if stringUtils.ISUUID(sheet.EntityTypeSheet.Id) {
 			fmt.Println("Id is valid")
 
 			typeSheet := sheet.EntityTypeSheet
-			idx := slices.IndexFunc(types, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
+			idx := slices.IndexFunc(typeList, func(c entityType.EntityType) bool { return c.Name == sheet.EntityTypeSheet.ParentId })
 			if idx != -1 {
-				typeSheet.ParentId = types[idx].Id
+				typeSheet.ParentId = typeList[idx].Id
 			} else {
 				log.Fatalf("Parent type not found: %s", sheet.EntityTypeSheet.ParentId)
 			}
@@ -97,13 +130,86 @@ func main() {
 
 			entityType.DoUpdateEntityType(userSession, connectionToPangolinParams.NfviPangolin, &entityTypeInstance)
 			allSheets[index].EntityTypeSheet.Id = entityTypeInstance.Id
-			types = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
+			typeList = entityType.GetAllEntityTypes(userSession, connectionToPangolinParams.NfviPangolin)
 		}
 
 	}
 
+	for _, sheet := range allSheets {
+		entityTypeId := sheet.EntityTypeSheet.Id
+		fmt.Println("EntityTypeId: ", entityTypeId)
+
+		for _, propSheet := range sheet.PropSheetItems {
+
+			propGroupIdx := slices.IndexFunc(propGroupList, func(c propGroup.PropGroup) bool { return c.Name == propSheet.GroupName })
+			if propGroupIdx != -1 {
+				propSheet.PropGroupId = propGroupList[propGroupIdx].Id
+			} else {
+				propGroupInstance := propGroup.PropGroup{Name: propSheet.GroupName}
+				propGroup.DoCreatePropGroup(userSession, connectionToPangolinParams.NfviPangolin, &propGroupInstance)
+				propSheet.PropGroupId = propGroupInstance.Id
+				propGroupList = propGroup.GetAllPropGroupList(userSession, connectionToPangolinParams.NfviPangolin)
+			}
+
+			propTypeIdx := slices.IndexFunc(propTypesList, func(c propType.PropType) bool { return c.Name == propSheet.PropTypeId })
+			if propTypeIdx != -1 {
+				propSheet.PropTypeId = propTypesList[propTypeIdx].Id
+			} else {
+				log.Fatal("PropType not found: ", propSheet.PropTypeId)
+			}
+
+			propRequestInstance := getPropRequestInstance(propSheet)
+
+			var dimensionRequest = dimension.Dimension{}
+			dimensionIdx := slices.IndexFunc(dimensionList, func(c dimension.Dimension) bool { return c.Name == propSheet.Dimension })
+			if dimensionIdx != -1 {
+				dimensionRequest = dimensionList[dimensionIdx]
+			} else {
+				log.Fatal("Dimension not found: ", propSheet.Dimension)
+			}
+
+			if propSheet.Id == "" {
+				createProp := prop.DoCreateProp(userSession, connectionToPangolinParams.NfviPangolin, &propRequestInstance)
+				entityTypeInstance := entityType.EntityType{Name: sheet.EntityTypeSheet.Name, Id: sheet.EntityTypeSheet.Id, ParentId: sheet.EntityTypeSheet.ParentId, Description: sheet.EntityTypeSheet.Description, Params: sheet.EntityTypeSheet.Params}
+				entityTypeProp.DoCreateEntityTypeProp(userSession, connectionToPangolinParams.NfviPangolin, dimensionRequest, entityTypeInstance, createProp)
+				doUpdateCell(spreadsheetID, sheet.sheetTitle, propSheet.RowIndex, "H", createProp.Id, ctx)
+
+				//list values
+				if propRequestInstance.PropTypeId == "000a0000-0000-4000-8000-000000000000" {
+					for _, propListValueItem := range propSheet.ListValues {
+						propListValueItem.PropId = createProp.Id
+						propListValueInstance := propListValue.PropListValue{Name: propListValueItem.Name, PropId: propListValueItem.PropId}
+						propListValue.DoCreatePropListValue(userSession, connectionToPangolinParams.NfviPangolin, &propListValueInstance)
+					}
+				}
+
+			} else {
+				fmt.Println("Prop Id is valid")
+			}
+
+		}
+	}
+
 	fmt.Println(allSheets)
 
+}
+
+func getPropRequestInstance(propSheet PropSheet) prop.PropRequest {
+	propRequestInstance := prop.PropRequest{
+		Name:        propSheet.Name,
+		PropGroupId: propSheet.PropGroupId,
+		PropTypeId:  propSheet.PropTypeId,
+	}
+
+	if propSheet.Params != "" {
+		propRequestInstance.Params = propSheet.Params
+	}
+
+	if propSheet.Description != "" {
+		propRequestInstance.Description = propSheet.Description
+	}
+
+	return propRequestInstance
 }
 
 func getEntityTypeInstance(typeSheet EntityTypeSheet) entityType.EntityType {
@@ -177,9 +283,21 @@ func getAllSheets(id string, ctx context.Context) []SheetData {
 
 			var PropListValueItems = []propListValue.PropListValue{}
 			if value[5] != nil && value[5] != "" {
-				split := strings.Split(value[5].(string), ",")
-				for _, v := range split {
-					PropListValueItems = append(PropListValueItems, propListValue.PropListValue{Name: v[1 : len(v)-1]})
+
+				r := csv.NewReader(strings.NewReader(value[5].(string)))
+				r.LazyQuotes = true
+
+				records, err := r.ReadAll()
+				if err != nil {
+					log.Fatalf("Error reading csv: %s", err)
+				}
+
+				for _, record := range records {
+					for _, val := range record {
+						trim := strings.Trim(val, " ")
+						PropListValueItems = append(PropListValueItems, propListValue.PropListValue{Name: trim})
+					}
+
 				}
 			}
 
@@ -190,7 +308,11 @@ func getAllSheets(id string, ctx context.Context) []SheetData {
 				GroupName:   value[3].(string),
 				Params:      value[4].(string),
 				ListValues:  PropListValueItems,
-				Dimension:   value[7].(string),
+				Dimension:   value[6].(string),
+				RowIndex:    key + 1,
+			}
+			if len(value) > 7 {
+				PropSheet.Id = value[7].(string)
 			}
 
 			propSheets = append(propSheets, PropSheet)
@@ -236,6 +358,7 @@ type EntityTypeSheet struct {
 }
 
 type PropSheet struct {
+	Id          string
 	Name        string
 	PropGroupId string
 	PropTypeId  string
@@ -244,6 +367,7 @@ type PropSheet struct {
 	GroupName   string
 	ListValues  []propListValue.PropListValue
 	Dimension   string
+	RowIndex    int
 }
 
 type SheetData struct {

@@ -25,7 +25,7 @@ func getPropDetailsById(session security.UserSession, pangolin string, propId st
 	}
 }
 
-func DoCreateProp(session security.UserSession, pangolin string, request PropRequest) Prop {
+func DoCreateProp(session security.UserSession, pangolin string, request *PropRequest) Prop {
 	resource := "/api/v1/Prop"
 	resp, resBody := restClient.SendPostRequest(request, session, pangolin, resource)
 	if resp.StatusCode == 201 {

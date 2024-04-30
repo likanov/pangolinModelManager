@@ -6,7 +6,7 @@ import (
 	"pangolinModelManager/security"
 )
 
-func DoCreatePropListValue(session security.UserSession, pangolin string, propListValue PropListValue) {
+func DoCreatePropListValue(session security.UserSession, pangolin string, propListValue *PropListValue) {
 	resource := "/api/v1/PropListValue"
 	resp, resBody := restClient.SendPostRequest(propListValue, session, pangolin, resource)
 	if resp.StatusCode == 201 {

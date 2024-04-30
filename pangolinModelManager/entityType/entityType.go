@@ -31,8 +31,7 @@ func DoUpdateEntityType(session security.UserSession, pangolin string, e *Entity
 
 	resp, resBody := restClient.SendPatchRequest(e, session, pangolin, resource)
 	if resp.StatusCode == 200 {
-		fmt.Println("Type created successfully :", string(resBody))
-		e.Id = string(resBody)
+		fmt.Println("Type updated successfully :", string(resBody))
 
 		var EntityType EntityType
 		err := json.Unmarshal(resBody, &EntityType)
