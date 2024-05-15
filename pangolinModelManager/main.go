@@ -25,10 +25,6 @@ import (
 	"strings"
 )
 
-const (
-	credentials = "golang-api-419608-80318434846a.json"
-)
-
 var (
 	//go:embed golang-api-419608-80318434846a.json
 	credentialsData []byte
