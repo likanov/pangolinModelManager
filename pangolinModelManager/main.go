@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/csv"
 	"fmt"
 	"golang.org/x/oauth2/google"
@@ -25,8 +26,12 @@ import (
 )
 
 const (
-	//spreadsheetID = "1ANHnLYMldOaWvGcdUrLLEEngxAVPPLDzZ__q0n5HeF8"
 	credentials = "golang-api-419608-80318434846a.json"
+)
+
+var (
+	//go:embed golang-api-419608-80318434846a.json
+	credentialsData []byte
 )
 
 var spreadsheetID string
@@ -55,7 +60,7 @@ func main() {
 		fmt.Println("Importing data from Google Sheets to Pangolin")
 		doImport()
 	} else if args[1] == "version" {
-		fmt.Println("Version:1.1.0")
+		fmt.Println("Version:1.2.0")
 		fmt.Println("git info:", version)
 	} else if args[1] == "help" {
 		fmt.Println("import: Import the data from Google Sheets to Pangolin")
@@ -67,13 +72,13 @@ func main() {
 
 }
 func doImport() {
-	// Load the Google Sheets API credentials from your JSON file.
-	creds, err := os.ReadFile(credentials)
-	if err != nil {
-		log.Fatalf("Unable to read credentials file: %v", err)
-	}
+	//var f embed.FS
+	//creds, err := f.ReadFile(credentials)
+	//if err != nil {
+	//	log.Fatalf("Unable to read credentials file: %v", err)
+	//}
 
-	config, err := google.JWTConfigFromJSON(creds, sheets.SpreadsheetsScope)
+	config, err := google.JWTConfigFromJSON(credentialsData, sheets.SpreadsheetsScope)
 	if err != nil {
 		log.Fatalf("Unable to create JWT config: %v", err)
 	}
@@ -189,8 +194,6 @@ func doImport() {
 
 		}
 	}
-
-	fmt.Println(allSheets)
 
 }
 
